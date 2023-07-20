@@ -41,7 +41,7 @@ class Task(threading.Thread):
         print(command)
         self.result = os.popen(command)
 
-        if self.log:
+        if self.log and type(self).__name__ != "CPUPowerThread":
             task_log_path = self.log + "/" + str(self.id[0])+"/" \
                 + str(self.id[1]) + "." + type(self).__name__ \
                 + "." + str(self.start_time)
@@ -319,6 +319,30 @@ class ReactorUtilizationCollectorThread(Task):
             line = self.result.readline()
         self.result.close()
         return result_dic
+
+
+class CPUPowerThread(Task):
+    def __init__(self, env, id):
+        super().__init__(env, id)
+        self.start_time = round(int(env.args.time) * 0.25)
+        self.last_time = round(int(env.args.time) * 0.5)
+        self.task_set = env.args.bench_taskset
+
+    def create_command(self):
+        stat_dir = "/home/aisaka/ptu/"
+        task_log_path = self.log + "/" + str(self.id[0])+"/" \
+            + str(self.id[1]) + "." + type(self).__name__ \
+            + "." + str(self.start_time)
+        command = "sudo taskset -c " + self.task_set \
+            + " " + stat_dir + "ptat -t " \
+            + str(self.last_time) \
+            + " -log -logdir " \
+            + task_log_path \
+            + " -y &>/dev/null "
+        return command
+
+    def analyse(self):
+        return {}
 
 
 class PerfThread(Task):
@@ -734,6 +758,8 @@ class Environment():
             self.timecontinuous_threadclass_list.append(PerfThread)
         if self.args.perf_record:
             self.timecontinuous_threadclass_list.append(PerfRecordThread)
+        if self.args.cpu_power:
+            self.timecontinuous_threadclass_list.append(CPUPowerThread)
 
     def general_pre_processing(self):
         os.system("sudo killall -9 -w ceph-mon ceph-mgr ceph-osd \
@@ -1091,6 +1117,10 @@ if __name__ == "__main__":
     parser.add_argument('--perf-record',
                         action='store_true',
                         help='collect perf record information')
+    # internal use only
+    parser.add_argument('--cpu-power',
+                        action='store_true',
+                        help='collect cpu power information')
 
     args = parser.parse_args()
 
