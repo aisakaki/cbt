@@ -41,7 +41,8 @@ class Task(threading.Thread):
         print(command)
         self.result = os.popen(command)
 
-        if self.log and type(self).__name__ != "CPUPowerThread":
+        if self.log and type(self).__name__ \
+            not in ["CPUPowerThread", "EmonThread"]:
             task_log_path = self.log + "/" + str(self.id[0])+"/" \
                 + str(self.id[1]) + "." + type(self).__name__ \
                 + "." + str(self.start_time)
@@ -344,6 +345,24 @@ class CPUPowerThread(Task):
     def analyse(self):
         return {}
 
+
+class EmonThread(Task):
+    def __init__(self, env, id):
+        super().__init__(env, id)
+        self.start_time = round(int(env.args.time) * 0.25)
+        self.task_set = env.args.bench_taskset
+
+    def create_command(self):
+        command = "taskset -c " + self.task_set \
+            + " emon -collect-edp -f emon.dat"
+        return command
+
+    def analyse(self):
+        return {}
+
+    @staticmethod
+    def post_process(env, test_case_result):
+        os.system("emon -stop")
 
 class PerfThread(Task):
     def __init__(self, env, id):
@@ -760,6 +779,8 @@ class Environment():
             self.timecontinuous_threadclass_list.append(PerfRecordThread)
         if self.args.cpu_power:
             self.timecontinuous_threadclass_list.append(CPUPowerThread)
+        if self.args.emon:
+            self.timecontinuous_threadclass_list.append(EmonThread)
 
     def general_pre_processing(self):
         os.system("sudo killall -9 -w ceph-mon ceph-mgr ceph-osd \
@@ -1121,6 +1142,9 @@ if __name__ == "__main__":
     parser.add_argument('--cpu-power',
                         action='store_true',
                         help='collect cpu power information')
+    parser.add_argument('--emon',
+                        action='store_true',
+                        help='collect emon information')
 
     args = parser.parse_args()
 
